@@ -2,6 +2,18 @@
 require_once 'includes/db_connect.php';
 session_start();
 
+// Check for error messages
+$error_message = '';
+if (isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case '1':
+            $error_message = 'There was an error processing your request. Please try again.';
+            break;
+        default:
+            $error_message = 'An unknown error occurred.';
+    }
+}
+
 // Get job ID from URL
 $job_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
@@ -12,7 +24,7 @@ if ($job_id <= 0) {
 }
 
 // Get job details
-$job_query = "SELECT j.*, c.company_name, c.logo, c.website, c.description as company_description, 
+$job_query = "SELECT j.*, c.company_name, c.logo, c.website, c.company_description, 
               cat.name as category_name 
               FROM jobs j 
               JOIN companies c ON j.company_id = c.id 
@@ -20,26 +32,45 @@ $job_query = "SELECT j.*, c.company_name, c.logo, c.website, c.description as co
               WHERE j.id = ? AND j.status = 'active'";
 
 $stmt = $conn->prepare($job_query);
-$stmt->bind_param('i', $job_id);
-$stmt->execute();
-$result = $stmt->get_result();
+if ($stmt === false) {
+    // Handle prepare error with more detailed information
+    $error_message = "Database error: " . $conn->error;
+    // Log the error for debugging
+    error_log("SQL Prepare Error in job-details.php: " . $conn->error);
+    // Don't redirect, display the error on the page
+    // header('Location: jobs.php?error=1');
+    // exit;
+} else {
+    $stmt->bind_param('i', $job_id);
+    if (!$stmt->execute()) {
+        // Handle execution error
+        $error_message = "Database error: " . $stmt->error;
+        // Log the error for debugging
+        error_log("SQL Execute Error in job-details.php: " . $stmt->error);
+        // Don't redirect, display the error on the page
+        // header('Location: jobs.php?error=1');
+        // exit;
+    } else {
+        $result = $stmt->get_result();
 
-// If job not found, redirect to jobs page
-if ($result->num_rows === 0) {
-    header('Location: jobs.php');
-    exit;
+        // If job not found, redirect to jobs page
+        if ($result->num_rows === 0) {
+            header('Location: jobs.php');
+            exit;
+        }
+
+        $job = $result->fetch_assoc();
+    }
 }
-
-$job = $result->fetch_assoc();
 
 // Process job application form
 $application_submitted = false;
-$error_message = '';
+$application_error_message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_job'])) {
     // Check if user is logged in
     if (!isset($_SESSION['user_id'])) {
-        $error_message = 'Please log in to apply for this job.';
+        $application_error_message = 'Please log in to apply for this job.';
     } else {
         // Get form data
         $first_name = trim($_POST['first_name']);
@@ -52,7 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_job'])) {
         
         // Validate form data
         if (empty($first_name) || empty($surname) || empty($email) || empty($phone)) {
-            $error_message = 'Please fill in all required fields.';
+            $application_error_message = 'Please fill in all required fields.';
         } else {
             // Handle CV upload
             $cv_filename = null;
@@ -61,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_job'])) {
                 $file_extension = strtolower(pathinfo($_FILES['cv']['name'], PATHINFO_EXTENSION));
                 
                 if (!in_array($file_extension, $allowed_extensions)) {
-                    $error_message = 'Only PDF, DOC, and DOCX files are allowed for CV.';
+                    $application_error_message = 'Only PDF, DOC, and DOCX files are allowed for CV.';
                 } else {
                     // Create upload directory if it doesn't exist
                     $upload_dir = 'uploads/cvs/';
@@ -75,25 +106,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_job'])) {
                     
                     // Move uploaded file
                     if (!move_uploaded_file($_FILES['cv']['tmp_name'], $upload_path)) {
-                        $error_message = 'Failed to upload CV. Please try again.';
+                        $application_error_message = 'Failed to upload CV. Please try again.';
                     }
                 }
             } else {
-                $error_message = 'Please upload your CV.';
+                $application_error_message = 'Please upload your CV.';
             }
             
             // If no errors, insert application into database
-            if (empty($error_message)) {
+            if (empty($application_error_message)) {
                 $application_query = "INSERT INTO applications (job_id, user_id, first_name, surname, email, phone, location, cv, cover_letter, status, created_at) 
                                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())";
                 
                 $stmt = $conn->prepare($application_query);
-                $stmt->bind_param('iissssss', $job_id, $user_id, $first_name, $surname, $email, $phone, $location, $cv_filename, $cover_letter);
-                
-                if ($stmt->execute()) {
-                    $application_submitted = true;
+                if ($stmt === false) {
+                    // Handle prepare error with more detailed information
+                    $error_message = "Database error: " . $conn->error;
+                    // Log the error for debugging
+                    error_log("SQL Prepare Error in job-details.php: " . $conn->error);
+                    // Don't redirect, display the error on the page
+                    // header('Location: jobs.php?error=1');
+                    // exit;
                 } else {
-                    $error_message = 'Failed to submit application. Please try again.';
+                    $stmt->bind_param('iissssss', $job_id, $user_id, $first_name, $surname, $email, $phone, $location, $cv_filename, $cover_letter);
+                    
+                    if (!$stmt->execute()) {
+                        // Handle execution error
+                        $error_message = "Database error: " . $stmt->error;
+                        // Log the error for debugging
+                        error_log("SQL Execute Error in job-details.php: " . $stmt->error);
+                        // Don't redirect, display the error on the page
+                        // header('Location: jobs.php?error=1');
+                        // exit;
+                    }
+                    $application_submitted = true;
                 }
             }
         }
@@ -105,9 +151,27 @@ $has_applied = false;
 if (isset($_SESSION['user_id'])) {
     $check_application = "SELECT id FROM applications WHERE job_id = ? AND user_id = ?";
     $stmt = $conn->prepare($check_application);
-    $stmt->bind_param('ii', $job_id, $_SESSION['user_id']);
-    $stmt->execute();
-    $has_applied = ($stmt->get_result()->num_rows > 0);
+    if ($stmt === false) {
+        // Handle prepare error with more detailed information
+        $error_message = "Database error: " . $conn->error;
+        // Log the error for debugging
+        error_log("SQL Prepare Error in job-details.php: " . $conn->error);
+    } else {
+        if ($stmt->bind_param('ii', $job_id, $_SESSION['user_id'])) {
+            if (!$stmt->execute()) {
+                // Handle execution error
+                $error_message = "Database error: " . $stmt->error;
+                // Log the error for debugging
+                error_log("SQL Execute Error in job-details.php: " . $stmt->error);
+            } else {
+                $has_applied = ($stmt->get_result()->num_rows > 0);
+            }
+        } else {
+            $error_message = "Database error: " . $stmt->error;
+            // Log the error for debugging
+            error_log("SQL Bind Param Error in job-details.php: " . $stmt->error);
+        }
+    }
 }
 
 // Get similar jobs
@@ -118,9 +182,33 @@ $similar_jobs_query = "SELECT j.id, j.title, j.location, j.job_type, c.company_n
                       ORDER BY j.created_at DESC LIMIT 3";
 
 $stmt = $conn->prepare($similar_jobs_query);
-$stmt->bind_param('ii', $job['category_id'], $job_id);
-$stmt->execute();
-$similar_jobs = $stmt->get_result();
+if ($stmt === false) {
+    // Handle prepare error with more detailed information
+    $error_message = "Database error: " . $conn->error;
+    // Log the error for debugging
+    error_log("SQL Prepare Error in job-details.php: " . $conn->error);
+    // Don't redirect, display the error on the page
+    // header('Location: jobs.php?error=1');
+    // exit;
+} else {
+    if ($stmt->bind_param('ii', $job['category_id'], $job_id)) {
+        if (!$stmt->execute()) {
+            // Handle execution error
+            $error_message = "Database error: " . $stmt->error;
+            // Log the error for debugging
+            error_log("SQL Execute Error in job-details.php: " . $stmt->error);
+            // Don't redirect, display the error on the page
+            // header('Location: jobs.php?error=1');
+            // exit;
+        }
+        $similar_jobs = $stmt->get_result();
+    } else {
+        $error_message = "Database error: " . $stmt->error;
+        // Log the error for debugging
+        error_log("SQL Bind Param Error in job-details.php: " . $stmt->error);
+    }
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -128,13 +216,49 @@ $similar_jobs = $stmt->get_result();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $job['title']; ?> - JobConnect</title>
+    <title><?php echo htmlspecialchars($job['title']); ?> - JobConnect</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        /* Custom styles for job details page */
+        .company-logo-sm {
+            max-width: 40px;
+            max-height: 40px;
+            object-fit: contain;
+        }
+        .company-logo-md {
+            max-width: 100px;
+            max-height: 100px;
+            object-fit: contain;
+        }
+        /* Ensure footer stays at bottom */
+        main {
+            min-height: calc(100vh - 300px); /* Adjust based on footer height */
+            overflow: hidden;
+        }
+        .job-details {
+            overflow: visible;
+        }
+        /* Fix for similar jobs list */
+        .list-group-item {
+            overflow: hidden;
+        }
+        .list-group {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+    </style>
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
+
+    <?php if (!empty($error_message)): ?>
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <?php echo $error_message; ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    <?php endif; ?>
 
     <main>
         <!-- Job Details Header -->
@@ -146,14 +270,14 @@ $similar_jobs = $stmt->get_result();
                             <ol class="breadcrumb mb-3">
                                 <li class="breadcrumb-item"><a href="index.php">Home</a></li>
                                 <li class="breadcrumb-item"><a href="jobs.php">Jobs</a></li>
-                                <li class="breadcrumb-item active" aria-current="page"><?php echo $job['title']; ?></li>
+                                <li class="breadcrumb-item active" aria-current="page"><?php echo htmlspecialchars($job['title']); ?></li>
                             </ol>
                         </nav>
-                        <h1 class="mb-2"><?php echo $job['title']; ?></h1>
+                        <h1 class="mb-2"><?php echo htmlspecialchars($job['title']); ?></h1>
                         <div class="d-flex flex-wrap align-items-center mb-2">
-                            <img src="uploads/company_logos/<?php echo $job['logo']; ?>" alt="<?php echo $job['company_name']; ?>" class="company-logo-sm me-2">
-                            <span class="me-3"><?php echo $job['company_name']; ?></span>
-                            <span class="location me-3"><i class="fas fa-map-marker-alt me-1"></i> <?php echo $job['location']; ?></span>
+                            <img src="<?php echo file_exists('uploads/company_logos/' . $job['logo']) ? 'uploads/company_logos/' . htmlspecialchars($job['logo']) : 'assets/img/default-company.png'; ?>" alt="<?php echo htmlspecialchars($job['company_name']); ?>" class="company-logo-sm me-2" style="max-width: 40px; max-height: 40px; object-fit: contain;">
+                            <span class="me-3"><?php echo htmlspecialchars($job['company_name']); ?></span>
+                            <span class="location me-3"><i class="fas fa-map-marker-alt me-1"></i> <?php echo htmlspecialchars($job['location']); ?></span>
                             <span class="job-type me-3 <?php echo strtolower($job['job_type']); ?>">
                                 <i class="fas fa-briefcase me-1"></i> <?php echo $job['job_type']; ?>
                             </span>
@@ -233,8 +357,8 @@ $similar_jobs = $stmt->get_result();
                                         <p>You have already submitted an application for this job. You can check the status of your application in your dashboard.</p>
                                     </div>
                                 <?php else: ?>
-                                    <?php if (!empty($error_message)): ?>
-                                        <div class="alert alert-danger"><?php echo $error_message; ?></div>
+                                    <?php if (!empty($application_error_message)): ?>
+                                        <div class="alert alert-danger"><?php echo $application_error_message; ?></div>
                                     <?php endif; ?>
 
                                     <?php if (!isset($_SESSION['user_id'])): ?>
@@ -304,7 +428,7 @@ $similar_jobs = $stmt->get_result();
                                     </li>
                                     <li class="mb-2">
                                         <i class="fas fa-map-marker-alt me-2"></i>
-                                        <strong>Location:</strong> <?php echo $job['location']; ?>
+                                        <strong>Location:</strong> <?php echo htmlspecialchars($job['location']); ?>
                                     </li>
                                     <li class="mb-2">
                                         <i class="fas fa-briefcase me-2"></i>
@@ -317,12 +441,12 @@ $similar_jobs = $stmt->get_result();
                                     <li class="mb-2">
                                         <i class="fas fa-money-bill-wave me-2"></i>
                                         <strong>Salary:</strong>
-                                        <?php if (!empty($job['salary_min']) && !empty($job['salary_max'])): ?>
-                                            GHS <?php echo number_format($job['salary_min']); ?> - GHS <?php echo number_format($job['salary_max']); ?>
-                                        <?php elseif (!empty($job['salary_min'])): ?>
-                                            From GHS <?php echo number_format($job['salary_min']); ?>
-                                        <?php elseif (!empty($job['salary_max'])): ?>
-                                            Up to GHS <?php echo number_format($job['salary_max']); ?>
+                                        <?php if (!empty($job['min_salary']) && !empty($job['max_salary'])): ?>
+                                            GHS <?php echo number_format($job['min_salary']); ?> - GHS <?php echo number_format($job['max_salary']); ?>
+                                        <?php elseif (!empty($job['min_salary'])): ?>
+                                            From GHS <?php echo number_format($job['min_salary']); ?>
+                                        <?php elseif (!empty($job['max_salary'])): ?>
+                                            Up to GHS <?php echo number_format($job['max_salary']); ?>
                                         <?php else: ?>
                                             Not specified
                                         <?php endif; ?>
@@ -342,8 +466,8 @@ $similar_jobs = $stmt->get_result();
                             </div>
                             <div class="card-body">
                                 <div class="text-center mb-3">
-                                    <img src="uploads/company_logos/<?php echo $job['logo']; ?>" alt="<?php echo $job['company_name']; ?>" class="company-logo-md">
-                                    <h3 class="h6 mt-2"><?php echo $job['company_name']; ?></h3>
+                                    <img src="<?php echo file_exists('uploads/company_logos/' . $job['logo']) ? 'uploads/company_logos/' . htmlspecialchars($job['logo']) : 'assets/img/default-company.png'; ?>" alt="<?php echo htmlspecialchars($job['company_name']); ?>" class="company-logo-md">
+                                    <h3 class="h6 mt-2"><?php echo htmlspecialchars($job['company_name']); ?></h3>
                                 </div>
                                 <div class="company-description">
                                     <?php echo substr($job['company_description'], 0, 200) . (strlen($job['company_description']) > 200 ? '...' : ''); ?>
@@ -370,7 +494,7 @@ $similar_jobs = $stmt->get_result();
                                             <li class="list-group-item">
                                                 <div class="d-flex">
                                                     <div class="flex-shrink-0">
-                                                        <img src="uploads/company_logos/<?php echo $similar_job['logo']; ?>" alt="<?php echo $similar_job['company_name']; ?>" class="company-logo-sm">
+                                                        <img src="<?php echo file_exists('uploads/company_logos/' . $similar_job['logo']) ? 'uploads/company_logos/' . htmlspecialchars($similar_job['logo']) : 'assets/img/default-company.png'; ?>" alt="<?php echo htmlspecialchars($similar_job['company_name']); ?>" class="company-logo-sm" style="max-width: 30px; max-height: 30px; object-fit: contain;">
                                                     </div>
                                                     <div class="flex-grow-1 ms-3">
                                                         <h3 class="h6 mb-1">
@@ -379,8 +503,8 @@ $similar_jobs = $stmt->get_result();
                                                             </a>
                                                         </h3>
                                                         <div class="small text-muted">
-                                                            <span class="me-2"><?php echo $similar_job['company_name']; ?></span>
-                                                            <span class="me-2"><i class="fas fa-map-marker-alt"></i> <?php echo $similar_job['location']; ?></span>
+                                                            <span class="me-2"><?php echo htmlspecialchars($similar_job['company_name']); ?></span>
+                                                            <span class="me-2"><i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($similar_job['location']); ?></span>
                                                             <span><i class="fas fa-briefcase"></i> <?php echo $similar_job['job_type']; ?></span>
                                                         </div>
                                                     </div>

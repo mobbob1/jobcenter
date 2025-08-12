@@ -49,7 +49,7 @@ if (!empty($where_clauses)) {
     $query .= " WHERE " . implode(" AND ", $where_clauses);
 }
 
-$query .= " GROUP BY c.id ORDER BY c.name ASC LIMIT ?, ?";
+$query .= " GROUP BY c.id ORDER BY c.company_name ASC LIMIT ?, ?";
 $params[] = $offset;
 $params[] = $records_per_page;
 $types .= "ii";
@@ -189,7 +189,7 @@ $page_title = "Companies";
                                     <div class="d-flex align-items-center mb-3">
                                         <div class="company-logo me-3">
                                             <?php if (!empty($company['logo']) && file_exists('uploads/company_logos/' . $company['logo'])): ?>
-                                                <img src="uploads/company_logos/<?php echo htmlspecialchars($company['logo']); ?>" alt="<?php echo htmlspecialchars($company['name']); ?>" class="img-fluid" style="max-width: 80px; max-height: 80px;">
+                                                <img src="uploads/company_logos/<?php echo htmlspecialchars($company['logo']); ?>" alt="<?php echo htmlspecialchars($company['company_name']); ?>" class="img-fluid" style="max-width: 80px; max-height: 80px;">
                                             <?php else: ?>
                                                 <div class="bg-light rounded d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
                                                     <i class="fas fa-building fa-2x text-secondary"></i>
@@ -199,7 +199,7 @@ $page_title = "Companies";
                                         <div>
                                             <h5 class="card-title mb-0">
                                                 <a href="company-details.php?id=<?php echo $company['id']; ?>" class="text-decoration-none">
-                                                    <?php echo htmlspecialchars($company['name']); ?>
+                                                    <?php echo htmlspecialchars($company['company_name']); ?>
                                                 </a>
                                             </h5>
                                             <?php if (!empty($company['location'])): ?>

@@ -1,6 +1,18 @@
 <?php
 require_once 'includes/db_connect.php';
 
+// Check for error messages
+$error_message = '';
+if (isset($_GET['error'])) {
+    switch ($_GET['error']) {
+        case '1':
+            $error_message = 'There was an error processing your request. Please try again.';
+            break;
+        default:
+            $error_message = 'An unknown error occurred.';
+    }
+}
+
 // Initialize filters
 $keyword = isset($_GET['keyword']) ? trim($_GET['keyword']) : '';
 $location = isset($_GET['location']) ? trim($_GET['location']) : '';
@@ -90,6 +102,56 @@ $categories = $conn->query($categories_query);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <style>
+        /* Custom styles for job cards */
+        .company-logo {
+            width: 100%;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .company-logo img {
+            max-width: 100%;
+            max-height: 80px;
+            object-fit: contain;
+        }
+        /* Ensure footer stays at bottom */
+        main {
+            min-height: calc(100vh - 300px); /* Adjust based on footer height */
+            overflow: visible;
+        }
+        .jobs-listing {
+            overflow: visible;
+        }
+        /* Enhanced job cards container */
+        .jobs-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            width: 100%;
+        }
+        /* Ensure job cards take full width */
+        .job-card {
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+        .job-card .card {
+            width: 100%;
+            display: block;
+        }
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .job-card .row {
+                flex-direction: column;
+            }
+            .job-card .col-md-3 {
+                text-align: left !important;
+                margin-top: 1rem;
+            }
+        }
+    </style>
 </head>
 <body>
     <?php include 'includes/header.php'; ?>
@@ -196,70 +258,79 @@ $categories = $conn->query($categories_query);
                             </div>
                         </div>
 
+                        <!-- Error Message -->
+                        <?php if (!empty($error_message)): ?>
+                            <div class="alert alert-danger mb-4">
+                                <?php echo $error_message; ?>
+                            </div>
+                        <?php endif; ?>
+
                         <!-- Job Cards -->
                         <?php if ($jobs->num_rows > 0): ?>
-                            <?php while ($job = $jobs->fetch_assoc()): ?>
-                                <div class="job-card mb-4">
-                                    <div class="card shadow-sm">
-                                        <div class="card-body">
-                                            <div class="row">
-                                                <div class="col-md-2 col-sm-3 mb-3 mb-md-0">
-                                                    <div class="company-logo">
-                                                        <img src="uploads/company_logos/<?php echo $job['logo']; ?>" alt="<?php echo $job['company_name']; ?>">
+                            <div class="jobs-container">
+                                <?php while ($job = $jobs->fetch_assoc()): ?>
+                                    <div class="job-card mb-4">
+                                        <div class="card shadow-sm">
+                                            <div class="card-body">
+                                                <div class="row">
+                                                    <div class="col-md-2 col-sm-3 mb-3 mb-md-0">
+                                                        <div class="company-logo">
+                                                            <img src="uploads/company_logos/<?php echo $job['logo']; ?>" alt="<?php echo $job['company_name']; ?>">
+                                                        </div>
                                                     </div>
-                                                </div>
-                                                <div class="col-md-7 col-sm-9">
-                                                    <h2 class="h5 mb-1">
-                                                        <a href="job-details.php?id=<?php echo $job['id']; ?>" class="text-dark text-decoration-none">
-                                                            <?php echo $job['title']; ?>
-                                                            <?php if ($job['is_featured']): ?>
-                                                                <span class="badge bg-warning text-dark ms-2">Featured</span>
+                                                    <div class="col-md-7 col-sm-9">
+                                                        <h2 class="h5 mb-1">
+                                                            <a href="job-details.php?id=<?php echo $job['id']; ?>" class="text-dark text-decoration-none">
+                                                                <?php echo $job['title']; ?>
+                                                                <?php if ($job['is_featured']): ?>
+                                                                    <span class="badge bg-warning text-dark ms-2">Featured</span>
+                                                                <?php endif; ?>
+                                                            </a>
+                                                        </h2>
+                                                        <p class="company mb-2"><?php echo $job['company_name']; ?></p>
+                                                        <div class="job-meta mb-2">
+                                                            <span class="location me-3"><i class="fas fa-map-marker-alt me-1"></i> <?php echo $job['location']; ?></span>
+                                                            <span class="job-type me-3 <?php echo strtolower($job['job_type']); ?>">
+                                                                <i class="fas fa-briefcase me-1"></i> <?php echo $job['job_type']; ?>
+                                                            </span>
+                                                            <span class="category me-3"><i class="fas fa-tags me-1"></i> <?php echo $job['category_name']; ?></span>
+                                                        </div>
+                                                        <div class="salary-range mb-2">
+                                                            <?php if (!empty($job['min_salary']) && !empty($job['max_salary'])): ?>
+                                                                <i class="fas fa-money-bill-wave me-1"></i> 
+                                                                GHS <?php echo number_format($job['min_salary']); ?> - GHS <?php echo number_format($job['max_salary']); ?>
+                                                            <?php elseif (!empty($job['min_salary'])): ?>
+                                                                <i class="fas fa-money-bill-wave me-1"></i> 
+                                                                From GHS <?php echo number_format($job['min_salary']); ?>
+                                                            <?php elseif (!empty($job['max_salary'])): ?>
+                                                                <i class="fas fa-money-bill-wave me-1"></i> 
+                                                                Up to GHS <?php echo number_format($job['max_salary']); ?>
+                                                            <?php else: ?>
+                                                                <i class="fas fa-money-bill-wave me-1"></i> Salary not specified
                                                             <?php endif; ?>
-                                                        </a>
-                                                    </h2>
-                                                    <p class="company mb-2"><?php echo $job['company_name']; ?></p>
-                                                    <div class="job-meta mb-2">
-                                                        <span class="location me-3"><i class="fas fa-map-marker-alt me-1"></i> <?php echo $job['location']; ?></span>
-                                                        <span class="job-type me-3 <?php echo strtolower($job['job_type']); ?>">
-                                                            <i class="fas fa-briefcase me-1"></i> <?php echo $job['job_type']; ?>
-                                                        </span>
-                                                        <span class="category me-3"><i class="fas fa-tags me-1"></i> <?php echo $job['category_name']; ?></span>
+                                                        </div>
+                                                        <div class="job-excerpt d-none d-md-block">
+                                                            <?php 
+                                                            $description = strip_tags($job['description']);
+                                                            echo substr($description, 0, 120) . (strlen($description) > 120 ? '...' : ''); 
+                                                            ?>
+                                                        </div>
                                                     </div>
-                                                    <div class="salary-range mb-2">
-                                                        <?php if (!empty($job['salary_min']) && !empty($job['salary_max'])): ?>
-                                                            <i class="fas fa-money-bill-wave me-1"></i> 
-                                                            GHS <?php echo number_format($job['salary_min']); ?> - GHS <?php echo number_format($job['salary_max']); ?>
-                                                        <?php elseif (!empty($job['salary_min'])): ?>
-                                                            <i class="fas fa-money-bill-wave me-1"></i> 
-                                                            From GHS <?php echo number_format($job['salary_min']); ?>
-                                                        <?php elseif (!empty($job['salary_max'])): ?>
-                                                            <i class="fas fa-money-bill-wave me-1"></i> 
-                                                            Up to GHS <?php echo number_format($job['salary_max']); ?>
-                                                        <?php else: ?>
-                                                            <i class="fas fa-money-bill-wave me-1"></i> Salary not specified
-                                                        <?php endif; ?>
+                                                    <div class="col-md-3 mt-3 mt-md-0 text-md-end">
+                                                        <div class="deadline mb-2">
+                                                            <small class="text-muted">
+                                                                <i class="far fa-clock me-1"></i> Deadline: 
+                                                                <?php echo date('M d, Y', strtotime($job['deadline'])); ?>
+                                                            </small>
+                                                        </div>
+                                                        <a href="job-details.php?id=<?php echo $job['id']; ?>" class="btn btn-outline-primary">View Details</a>
                                                     </div>
-                                                    <div class="job-excerpt d-none d-md-block">
-                                                        <?php 
-                                                        $description = strip_tags($job['description']);
-                                                        echo substr($description, 0, 120) . (strlen($description) > 120 ? '...' : ''); 
-                                                        ?>
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-3 mt-3 mt-md-0 text-md-end">
-                                                    <div class="deadline mb-2">
-                                                        <small class="text-muted">
-                                                            <i class="far fa-clock me-1"></i> Deadline: 
-                                                            <?php echo date('M d, Y', strtotime($job['deadline'])); ?>
-                                                        </small>
-                                                    </div>
-                                                    <a href="job-details.php?id=<?php echo $job['id']; ?>" class="btn btn-outline-primary">View Details</a>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            <?php endwhile; ?>
+                                <?php endwhile; ?>
+                            </div>
 
                             <!-- Pagination -->
                             <?php if ($total_pages > 1): ?>

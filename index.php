@@ -64,7 +64,7 @@
                             <div class="col-md-4 mb-4">
                                 <div class="job-card">
                                     <div class="company-logo">
-                                        <img src="uploads/company_logos/<?php echo $job['logo']; ?>" alt="<?php echo $job['company_name']; ?>">
+                                        <img src="<?php echo !empty($job['logo']) ? 'uploads/companies/' . htmlspecialchars($job['logo']) : 'assets/img/default-company.png'; ?>" alt="<?php echo htmlspecialchars($job['company_name']); ?>">
                                     </div>
                                     <div class="job-info">
                                         <h3><a href="job-details.php?id=<?php echo $job['id']; ?>"><?php echo $job['title']; ?></a></h3>
@@ -186,7 +186,7 @@
                             <div class="col-md-2 col-sm-4 col-6 mb-4">
                                 <div class="employer-logo">
                                     <a href="company-profile.php?id=<?php echo $company['id']; ?>">
-                                        <img src="uploads/company_logos/<?php echo $company['logo']; ?>" alt="<?php echo $company['company_name']; ?>">
+                                        <img src="<?php echo !empty($company['logo']) ? 'uploads/companies/' . htmlspecialchars($company['logo']) : 'assets/img/default-company.png'; ?>" alt="<?php echo htmlspecialchars($company['company_name']); ?>">
                                     </a>
                                 </div>
                             </div>
