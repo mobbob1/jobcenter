@@ -43,10 +43,10 @@ if ($company_result->num_rows == 0) {
         if (empty($title) || empty($description) || empty($requirements) || empty($location)) {
             $error_message = "Please fill all required fields.";
         } else {
-            // Insert job into database
+            // Insert job into database (use schema columns min_salary/max_salary; set initial status as 'inactive')
             $sql = "INSERT INTO jobs (title, description, requirements, location, job_type, 
-                    category_id, company_id, salary_min, salary_max, deadline, is_featured, status, created_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())";
+                    category_id, company_id, min_salary, max_salary, deadline, is_featured, status, created_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'inactive', NOW())";
             
             $stmt = $conn->prepare($sql);
             
@@ -54,7 +54,6 @@ if ($company_result->num_rows == 0) {
                 // Handle prepare error
                 $error_message = "Error preparing statement: " . $conn->error;
             } else {
-                $status = 'pending';
                 $stmt->bind_param("sssssiiissi", $title, $description, $requirements, $location, 
                                 $job_type, $category_id, $company_id, $salary_min, $salary_max, 
                                 $deadline, $is_featured);

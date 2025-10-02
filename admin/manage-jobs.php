@@ -139,7 +139,7 @@ $filter_category = isset($_GET['category']) ? (int)$_GET['category'] : 0;
 $filter_featured = isset($_GET['featured']) ? (int)$_GET['featured'] : -1; // -1 for all, 0 for not featured, 1 for featured
 
 // Build the query
-$query = "SELECT j.*, c.name as company_name, cat.name as category_name, 
+$query = "SELECT j.*, c.company_name, cat.name as category_name, 
           COUNT(a.id) as application_count, u.username as employer_username, u.email as employer_email
           FROM jobs j
           LEFT JOIN companies c ON j.company_id = c.id
@@ -152,7 +152,7 @@ $params = [];
 $types = "";
 
 if (!empty($search)) {
-    $where_clauses[] = "(j.title LIKE ? OR j.location LIKE ? OR c.name LIKE ?)";
+    $where_clauses[] = "(j.title LIKE ? OR j.location LIKE ? OR c.company_name LIKE ?)";
     $search_param = "%$search%";
     $params[] = $search_param;
     $params[] = $search_param;

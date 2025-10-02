@@ -14,16 +14,18 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_type'] != 'jobseeker') {
 $jobseeker_id = $_SESSION['user_id'];
 
 // Get jobseeker info
-$jobseeker_query = "SELECT * FROM jobseekers WHERE user_id = ?";
+$jobseeker_query = "SELECT js.*, u.email FROM job_seekers js JOIN users u ON js.user_id = u.id WHERE js.user_id = ?";
 $stmt = $conn->prepare($jobseeker_query);
 $stmt->bind_param("i", $jobseeker_id);
 $stmt->execute();
 $jobseeker_result = $stmt->get_result();
 $has_profile = ($jobseeker_result->num_rows > 0);
 $jobseeker_data = [];
+$job_seeker_profile_id = 0;
 
 if ($has_profile) {
     $jobseeker_data = $jobseeker_result->fetch_assoc();
+    $job_seeker_profile_id = (int)$jobseeker_data['id'];
 }
 
 // Get job application statistics
@@ -34,30 +36,30 @@ $shortlisted_applications = 0;
 
 if ($has_profile) {
     // Total applications
-    $applications_query = "SELECT COUNT(*) as total FROM job_applications WHERE jobseeker_id = ?";
+    $applications_query = "SELECT COUNT(*) as total FROM applications WHERE job_seeker_id = ?";
     $stmt = $conn->prepare($applications_query);
-    $stmt->bind_param("i", $jobseeker_id);
+    $stmt->bind_param("i", $job_seeker_profile_id);
     $stmt->execute();
     $total_applications = $stmt->get_result()->fetch_assoc()['total'];
     
     // Pending applications
-    $pending_query = "SELECT COUNT(*) as pending FROM job_applications WHERE jobseeker_id = ? AND status = 'pending'";
+    $pending_query = "SELECT COUNT(*) as pending FROM applications WHERE job_seeker_id = ? AND status = 'pending'";
     $stmt = $conn->prepare($pending_query);
-    $stmt->bind_param("i", $jobseeker_id);
+    $stmt->bind_param("i", $job_seeker_profile_id);
     $stmt->execute();
     $pending_applications = $stmt->get_result()->fetch_assoc()['pending'];
     
     // Viewed applications
-    $viewed_query = "SELECT COUNT(*) as viewed FROM job_applications WHERE jobseeker_id = ? AND status = 'viewed'";
+    $viewed_query = "SELECT COUNT(*) as viewed FROM applications WHERE job_seeker_id = ? AND status = 'reviewed'";
     $stmt = $conn->prepare($viewed_query);
-    $stmt->bind_param("i", $jobseeker_id);
+    $stmt->bind_param("i", $job_seeker_profile_id);
     $stmt->execute();
     $viewed_applications = $stmt->get_result()->fetch_assoc()['viewed'];
     
     // Shortlisted applications
-    $shortlisted_query = "SELECT COUNT(*) as shortlisted FROM job_applications WHERE jobseeker_id = ? AND status = 'shortlisted'";
+    $shortlisted_query = "SELECT COUNT(*) as shortlisted FROM applications WHERE job_seeker_id = ? AND status = 'shortlisted'";
     $stmt = $conn->prepare($shortlisted_query);
-    $stmt->bind_param("i", $jobseeker_id);
+    $stmt->bind_param("i", $job_seeker_profile_id);
     $stmt->execute();
     $shortlisted_applications = $stmt->get_result()->fetch_assoc()['shortlisted'];
 }
@@ -65,15 +67,15 @@ if ($has_profile) {
 // Get recent applications
 $recent_applications = [];
 if ($has_profile) {
-    $recent_applications_query = "SELECT ja.*, j.title as job_title, j.location as job_location, c.company_name, c.logo as company_logo 
-                               FROM job_applications ja 
-                               JOIN jobs j ON ja.job_id = j.id 
-                               JOIN companies c ON j.company_id = c.id 
-                               WHERE ja.jobseeker_id = ? 
-                               ORDER BY ja.applied_date DESC 
+    $recent_applications_query = "SELECT a.id, a.job_id, a.status, a.applied_at, j.title AS job_title, j.location AS job_location, c.company_name, c.logo AS company_logo
+                               FROM applications a
+                               JOIN jobs j ON a.job_id = j.id
+                               JOIN companies c ON j.company_id = c.id
+                               WHERE a.job_seeker_id = ?
+                               ORDER BY a.applied_at DESC
                                LIMIT 5";
     $stmt = $conn->prepare($recent_applications_query);
-    $stmt->bind_param("i", $jobseeker_id);
+    $stmt->bind_param("i", $job_seeker_profile_id);
     $stmt->execute();
     $recent_applications_result = $stmt->get_result();
     while ($application = $recent_applications_result->fetch_assoc()) {
@@ -83,7 +85,14 @@ if ($has_profile) {
 
 // Get recommended jobs
 $recommended_jobs = [];
-$recommended_jobs_query = "SELECT j.*, c.company_name, c.logo as company_logo 
+$recommended_jobs_query = "SELECT j.*, c.company_name, c.logo AS company_logo,
+                         CASE 
+                           WHEN j.salary_hidden = 1 THEN 'Hidden'
+                           WHEN j.min_salary IS NOT NULL AND j.max_salary IS NOT NULL AND j.salary_period IS NOT NULL THEN CONCAT(j.min_salary, ' - ', j.max_salary, ' ', j.salary_period)
+                           WHEN j.min_salary IS NOT NULL AND j.salary_period IS NOT NULL THEN CONCAT(j.min_salary, ' ', j.salary_period)
+                           WHEN j.max_salary IS NOT NULL AND j.salary_period IS NOT NULL THEN CONCAT(j.max_salary, ' ', j.salary_period)
+                           ELSE 'Not specified'
+                         END AS salary_range
                          FROM jobs j 
                          JOIN companies c ON j.company_id = c.id 
                          WHERE j.status = 'active' 
@@ -169,14 +178,14 @@ while ($job = $recommended_jobs_result->fetch_assoc()) {
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <h6 class="text-uppercase">Viewed</h6>
+                                        <h6 class="text-uppercase">Reviewed</h6>
                                         <h2 class="mb-0"><?php echo $viewed_applications; ?></h2>
                                     </div>
                                     <i class="fas fa-eye fa-2x opacity-50"></i>
                                 </div>
                             </div>
                             <div class="card-footer bg-transparent border-0">
-                                <a href="applications.php?status=viewed" class="text-white">View Details <i class="fas fa-arrow-right ms-1"></i></a>
+                                <a href="applications.php?status=reviewed" class="text-white">View Details <i class="fas fa-arrow-right ms-1"></i></a>
                             </div>
                         </div>
                     </div>
@@ -232,12 +241,12 @@ while ($job = $recommended_jobs_result->fetch_assoc()) {
                                                         <?php echo $application['company_name']; ?>
                                                     </div>
                                                 </td>
-                                                <td><?php echo date('M d, Y', strtotime($application['applied_date'])); ?></td>
+                                                <td><?php echo date('M d, Y', strtotime($application['applied_at'])); ?></td>
                                                 <td>
                                                     <?php if ($application['status'] == 'pending'): ?>
                                                         <span class="badge bg-info">Pending</span>
-                                                    <?php elseif ($application['status'] == 'viewed'): ?>
-                                                        <span class="badge bg-warning text-dark">Viewed</span>
+                                                    <?php elseif ($application['status'] == 'reviewed'): ?>
+                                                        <span class="badge bg-warning text-dark">Reviewed</span>
                                                     <?php elseif ($application['status'] == 'shortlisted'): ?>
                                                         <span class="badge bg-success">Shortlisted</span>
                                                     <?php elseif ($application['status'] == 'rejected'): ?>
@@ -308,7 +317,6 @@ while ($job = $recommended_jobs_result->fetch_assoc()) {
                                                 <a href="../job-details.php?id=<?php echo $job['id']; ?>" class="btn btn-sm btn-outline-primary">Apply Now</a>
                                             </div>
                                         </div>
-                                        <?php if (!$loop->last): ?><hr><?php endif; ?>
                                     <?php endforeach; ?>
                                     <div class="text-center mt-3">
                                         <a href="../jobs.php" class="btn btn-outline-primary">Browse All Jobs</a>
@@ -330,8 +338,8 @@ while ($job = $recommended_jobs_result->fetch_assoc()) {
                             <div class="card-body">
                                 <div class="d-flex align-items-center mb-3">
                                     <div class="profile-img me-3">
-                                        <?php if (!empty($jobseeker_data['profile_picture'])): ?>
-                                            <img src="../uploads/profile_pictures/<?php echo $jobseeker_data['profile_picture']; ?>" alt="Profile Picture">
+                                        <?php if (!empty($jobseeker_data['profile_image'])): ?>
+                                            <img src="../uploads/profile_pictures/<?php echo $jobseeker_data['profile_image']; ?>" alt="Profile Picture">
                                         <?php else: ?>
                                             <div class="default-profile-img">
                                                 <i class="fas fa-user"></i>
@@ -339,8 +347,8 @@ while ($job = $recommended_jobs_result->fetch_assoc()) {
                                         <?php endif; ?>
                                     </div>
                                     <div>
-                                        <h5 class="mb-1"><?php echo $jobseeker_data['first_name'] . ' ' . $jobseeker_data['last_name']; ?></h5>
-                                        <p class="text-muted mb-0"><?php echo $jobseeker_data['job_title']; ?></p>
+                                        <h5 class="mb-1"><?php echo $jobseeker_data['first_name'] . ' ' . $jobseeker_data['surname']; ?></h5>
+                                        <p class="text-muted mb-0"><?php echo $jobseeker_data['professional_title']; ?></p>
                                     </div>
                                 </div>
                                 <hr>
@@ -355,11 +363,11 @@ while ($job = $recommended_jobs_result->fetch_assoc()) {
                                     </div>
                                     <div class="col-md-6 mb-2">
                                         <small class="text-muted d-block">Location</small>
-                                        <span><?php echo $jobseeker_data['location']; ?></span>
+                                        <span><?php echo $jobseeker_data['city']; ?></span>
                                     </div>
                                     <div class="col-md-6 mb-2">
                                         <small class="text-muted d-block">Experience</small>
-                                        <span><?php echo $jobseeker_data['experience']; ?> years</span>
+                                        <span><?php echo $jobseeker_data['experience_years']; ?> years</span>
                                     </div>
                                 </div>
                                 <hr>

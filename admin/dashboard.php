@@ -40,7 +40,7 @@ if ($user_result && $user_result->num_rows > 0) {
 $job_query = "SELECT 
                COUNT(*) as total_jobs,
                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active_jobs,
-               SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_jobs
+               SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) as pending_jobs
               FROM jobs";
 $job_result = $conn->query($job_query);
 if ($job_result && $job_result->num_rows > 0) {
@@ -77,7 +77,7 @@ if ($recent_users_result && $recent_users_result->num_rows > 0) {
 }
 
 // Get recent jobs
-$recent_jobs_query = "SELECT j.*, c.name as company_name
+$recent_jobs_query = "SELECT j.*, c.company_name
                       FROM jobs j
                       LEFT JOIN companies c ON j.company_id = c.id
                       ORDER BY j.created_at DESC LIMIT 5";
@@ -89,13 +89,14 @@ if ($recent_jobs_result && $recent_jobs_result->num_rows > 0) {
 }
 
 // Get recent applications
-$recent_apps_query = "SELECT a.*, j.title as job_title, c.name as company_name,
-                      js.first_name, js.surname, js.email
+$recent_apps_query = "SELECT a.*, j.title as job_title, c.company_name as company_name,
+                      js.first_name, js.surname, u.email
                       FROM applications a
                       LEFT JOIN jobs j ON a.job_id = j.id
                       LEFT JOIN companies c ON j.company_id = c.id
                       LEFT JOIN job_seekers js ON a.job_seeker_id = js.id
-                      ORDER BY a.created_at DESC LIMIT 5";
+                      LEFT JOIN users u ON js.user_id = u.id
+                      ORDER BY a.applied_at DESC LIMIT 5";
 $recent_apps_result = $conn->query($recent_apps_query);
 if ($recent_apps_result && $recent_apps_result->num_rows > 0) {
     while ($app = $recent_apps_result->fetch_assoc()) {
@@ -270,7 +271,7 @@ $page_title = "Admin Dashboard";
                                                         <td>
                                                             <?php if ($job['status'] == 'active'): ?>
                                                                 <span class="badge bg-success">Active</span>
-                                                            <?php elseif ($job['status'] == 'pending'): ?>
+                                                            <?php elseif ($job['status'] == 'inactive'): ?>
                                                                 <span class="badge bg-warning text-dark">Pending</span>
                                                             <?php elseif ($job['status'] == 'expired'): ?>
                                                                 <span class="badge bg-danger">Expired</span>
@@ -417,7 +418,7 @@ $page_title = "Admin Dashboard";
                                                         
                                                         <div class="d-flex justify-content-between align-items-center">
                                                             <div class="small text-muted">
-                                                                <i class="far fa-clock me-1"></i> Applied <?php echo date('M d, Y', strtotime($app['created_at'])); ?>
+                                                                <i class="far fa-clock me-1"></i> Applied <?php echo date('M d, Y', strtotime($app['applied_at'])); ?>
                                                             </div>
                                                             <div>
                                                                 <a href="view-application.php?id=<?php echo $app['id']; ?>" class="btn btn-sm btn-outline-primary">

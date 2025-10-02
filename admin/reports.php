@@ -67,7 +67,7 @@ function get_count_with_filter($conn, $table, $where_clause = '', $date_field = 
 // Get job statistics
 $total_jobs = get_count_with_filter($conn, 'jobs');
 $active_jobs = get_count_with_filter($conn, 'jobs', "status = 'active'");
-$pending_jobs = get_count_with_filter($conn, 'jobs', "status = 'pending'");
+$pending_jobs = get_count_with_filter($conn, 'jobs', "status = 'inactive'");
 $featured_jobs = get_count_with_filter($conn, 'jobs', "is_featured = 1");
 
 // Get user statistics
@@ -76,10 +76,10 @@ $employers = get_count_with_filter($conn, 'users', "user_type = 'employer'");
 $jobseekers = get_count_with_filter($conn, 'users', "user_type = 'jobseeker'");
 
 // Get application statistics
-$total_applications = get_count_with_filter($conn, 'job_applications');
-$pending_applications = get_count_with_filter($conn, 'job_applications', "status = 'pending'");
-$approved_applications = get_count_with_filter($conn, 'job_applications', "status = 'approved'");
-$rejected_applications = get_count_with_filter($conn, 'job_applications', "status = 'rejected'");
+$total_applications = get_count_with_filter($conn, 'applications', '', 'applied_at');
+$pending_applications = get_count_with_filter($conn, 'applications', "status = 'pending'", 'applied_at');
+$approved_applications = get_count_with_filter($conn, 'applications', "status = 'approved'", 'applied_at');
+$rejected_applications = get_count_with_filter($conn, 'applications', "status = 'rejected'", 'applied_at');
 
 // Get monthly job data for chart
 $job_chart_data = [];
@@ -87,18 +87,18 @@ $application_chart_data = [];
 $user_chart_data = [];
 
 // Function to get monthly data for charts
-function get_monthly_data($conn, $table, $where_clause = '') {
+function get_monthly_data($conn, $table, $where_clause = '', $date_field = 'created_at') {
     $months = [];
     $counts = [];
     
-    $query = "SELECT DATE_FORMAT(created_at, '%Y-%m') as month, COUNT(*) as count 
+    $query = "SELECT DATE_FORMAT($date_field, '%Y-%m') as month, COUNT(*) as count 
               FROM $table";
     
     if (!empty($where_clause)) {
         $query .= " WHERE $where_clause";
     }
     
-    $query .= " GROUP BY DATE_FORMAT(created_at, '%Y-%m') 
+    $query .= " GROUP BY DATE_FORMAT($date_field, '%Y-%m') 
                 ORDER BY month ASC 
                 LIMIT 12";
     
@@ -116,13 +116,13 @@ function get_monthly_data($conn, $table, $where_clause = '') {
 }
 
 $job_chart_data = get_monthly_data($conn, 'jobs');
-$application_chart_data = get_monthly_data($conn, 'job_applications');
+$application_chart_data = get_monthly_data($conn, 'applications', '', 'applied_at');
 $user_chart_data = get_monthly_data($conn, 'users');
 
 // Get recent jobs
-$recent_jobs_query = "SELECT j.id, j.title, j.location, j.created_at, j.status, u.username as employer
+$recent_jobs_query = "SELECT j.id, j.title, j.location, j.created_at, j.status, c.company_name as company
                       FROM jobs j
-                      LEFT JOIN users u ON j.employer_id = u.id
+                      LEFT JOIN companies c ON j.company_id = c.id
                       ORDER BY j.created_at DESC
                       LIMIT 5";
 $recent_jobs_result = $conn->query($recent_jobs_query);
@@ -135,11 +135,13 @@ if ($recent_jobs_result && $recent_jobs_result->num_rows > 0) {
 }
 
 // Get recent applications
-$recent_applications_query = "SELECT a.id, a.status, a.created_at, j.title as job_title, u.username as applicant
-                             FROM job_applications a
+$recent_applications_query = "SELECT a.id, a.status, a.applied_at, j.title as job_title,
+                             COALESCE(u.username, CONCAT(js.first_name, ' ', js.surname)) as applicant
+                             FROM applications a
                              LEFT JOIN jobs j ON a.job_id = j.id
-                             LEFT JOIN users u ON a.user_id = u.id
-                             ORDER BY a.created_at DESC
+                             LEFT JOIN job_seekers js ON a.job_seeker_id = js.id
+                             LEFT JOIN users u ON js.user_id = u.id
+                             ORDER BY a.applied_at DESC
                              LIMIT 5";
 $recent_applications_result = $conn->query($recent_applications_query);
 $recent_applications = [];
@@ -473,7 +475,7 @@ $page_title = "Reports & Analytics";
                                         <thead>
                                             <tr>
                                                 <th>Title</th>
-                                                <th>Employer</th>
+                                                <th>Company</th>
                                                 <th>Status</th>
                                                 <th>Date</th>
                                             </tr>
@@ -487,11 +489,11 @@ $page_title = "Reports & Analytics";
                                                 <?php foreach ($recent_jobs as $job): ?>
                                                     <tr>
                                                         <td><?php echo htmlspecialchars($job['title']); ?></td>
-                                                        <td><?php echo htmlspecialchars($job['employer']); ?></td>
+                                                        <td><?php echo htmlspecialchars($job['company']); ?></td>
                                                         <td>
                                                             <?php if ($job['status'] == 'active'): ?>
                                                                 <span class="badge bg-success">Active</span>
-                                                            <?php elseif ($job['status'] == 'pending'): ?>
+                                                            <?php elseif ($job['status'] == 'inactive'): ?>
                                                                 <span class="badge bg-warning text-dark">Pending</span>
                                                             <?php else: ?>
                                                                 <span class="badge bg-secondary"><?php echo ucfirst($job['status']); ?></span>
@@ -545,7 +547,7 @@ $page_title = "Reports & Analytics";
                                                                 <span class="badge bg-secondary"><?php echo ucfirst($application['status']); ?></span>
                                                             <?php endif; ?>
                                                         </td>
-                                                        <td><?php echo date('M d, Y', strtotime($application['created_at'])); ?></td>
+                                                        <td><?php echo date('M d, Y', strtotime($application['applied_at'])); ?></td>
                                                     </tr>
                                                 <?php endforeach; ?>
                                             <?php endif; ?>

@@ -18,17 +18,19 @@ if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
 $application_id = $_GET['id'];
 
 // Fetch application details with related information
-$query = "SELECT a.*, j.title as job_title, j.description as job_description, 
-          j.requirements as job_requirements, j.salary_min, j.salary_max, j.location as job_location,
-          j.type as job_type, j.deadline, j.status as job_status, j.created_at as job_created_at,
-          c.name as company_name, c.logo as company_logo, c.website as company_website,
-          c.description as company_description, c.location as company_location,
-          u.full_name as applicant_name, u.email as applicant_email, u.phone as applicant_phone,
-          u.profile_image as applicant_image, u.created_at as user_created_at
+$query = "SELECT a.*, 
+          j.title AS job_title, j.description AS job_description, 
+          j.requirements AS job_requirements, j.min_salary, j.max_salary, j.location AS job_location,
+          j.job_type, j.deadline, j.status AS job_status, j.created_at AS job_created_at,
+          c.company_name, c.logo AS company_logo, c.website AS company_website,
+          c.company_description, CONCAT_WS(', ', c.city, c.state, c.country) AS company_location,
+          js.first_name, js.surname, js.phone, js.profile_image AS applicant_image,
+          u.email AS applicant_email, u.created_at AS user_created_at
           FROM applications a
           LEFT JOIN jobs j ON a.job_id = j.id
           LEFT JOIN companies c ON j.company_id = c.id
-          LEFT JOIN users u ON a.user_id = u.id
+          LEFT JOIN job_seekers js ON a.job_seeker_id = js.id
+          LEFT JOIN users u ON js.user_id = u.id
           WHERE a.id = ?";
 
 $stmt = $conn->prepare($query);
@@ -248,7 +250,7 @@ $page_title = "View Application";
                                 <strong>Company:</strong> <?php echo htmlspecialchars($application['company_name']); ?>
                             </p>
                             <p class="mb-1">
-                                <strong>Applied on:</strong> <?php echo date('F d, Y \a\t h:i A', strtotime($application['created_at'])); ?>
+                                <strong>Applied on:</strong> <?php echo date('F d, Y \a\t h:i A', strtotime($application['applied_at'])); ?>
                             </p>
                             <p class="mb-0">
                                 <strong>Status:</strong> 
@@ -283,16 +285,13 @@ $page_title = "View Application";
                             <div class="card-body">
                                 <div class="text-center mb-3">
                                     <?php if (!empty($application['applicant_image'])): ?>
-                                        <img src="../<?php echo $application['applicant_image']; ?>" alt="Profile Image" class="profile-image mb-3">
+                                        <img src="../uploads/profile_pictures/<?php echo $application['applicant_image']; ?>" alt="Profile Image" class="profile-image mb-3">
                                     <?php else: ?>
                                         <div class="profile-image mb-3 bg-light d-flex align-items-center justify-content-center">
                                             <i class="fas fa-user fa-3x text-secondary"></i>
                                         </div>
                                     <?php endif; ?>
-                                    <h5><?php echo htmlspecialchars($application['first_name'] . ' ' . $application['surname']); ?></h5>
-                                    <?php if (!empty($application['applicant_name']) && $application['applicant_name'] != $application['first_name'] . ' ' . $application['surname']): ?>
-                                        <p class="text-muted">(User: <?php echo htmlspecialchars($application['applicant_name']); ?>)</p>
-                                    <?php endif; ?>
+                                    <h5><?php echo htmlspecialchars(($application['first_name'] ?? '') . ' ' . ($application['surname'] ?? '')); ?></h5>
                                 </div>
                                 
                                 <ul class="list-group list-group-flush">
@@ -355,12 +354,12 @@ $page_title = "View Application";
                                     <li class="list-group-item">
                                         <i class="fas fa-money-bill-wave text-muted me-2"></i> 
                                         <?php 
-                                        if (!empty($application['salary_min']) && !empty($application['salary_max'])) {
-                                            echo '$' . number_format($application['salary_min']) . ' - $' . number_format($application['salary_max']);
-                                        } elseif (!empty($application['salary_min'])) {
-                                            echo 'From $' . number_format($application['salary_min']);
-                                        } elseif (!empty($application['salary_max'])) {
-                                            echo 'Up to $' . number_format($application['salary_max']);
+                                        if (!empty($application['min_salary']) && !empty($application['max_salary'])) {
+                                            echo '$' . number_format($application['min_salary']) . ' - $' . number_format($application['max_salary']);
+                                        } elseif (!empty($application['min_salary'])) {
+                                            echo 'From $' . number_format($application['min_salary']);
+                                        } elseif (!empty($application['max_salary'])) {
+                                            echo 'Up to $' . number_format($application['max_salary']);
                                         } else {
                                             echo 'Not specified';
                                         }
@@ -373,12 +372,16 @@ $page_title = "View Application";
                                     <li class="list-group-item">
                                         <i class="fas fa-info-circle text-muted me-2"></i> 
                                         Job Status: 
-                                        <span class="badge bg-<?php 
-                                            echo ($application['job_status'] === 'active') ? 'success' : 
-                                                (($application['job_status'] === 'pending') ? 'warning' : 
-                                                (($application['job_status'] === 'closed') ? 'danger' : 'secondary')); 
-                                        ?>">
-                                            <?php echo ucfirst($application['job_status']); ?>
+                                        <?php 
+                                            $job_status_label = $application['job_status'];
+                                            $job_status_class = 'secondary';
+                                            if ($application['job_status'] === 'active') { $job_status_class = 'success'; }
+                                            elseif ($application['job_status'] === 'inactive') { $job_status_class = 'warning'; $job_status_label = 'pending'; }
+                                            elseif ($application['job_status'] === 'filled') { $job_status_class = 'danger'; $job_status_label = 'closed'; }
+                                            elseif ($application['job_status'] === 'expired') { $job_status_class = 'danger'; $job_status_label = 'expired'; }
+                                        ?>
+                                        <span class="badge bg-<?php echo $job_status_class; ?>">
+                                            <?php echo ucfirst($job_status_label); ?>
                                         </span>
                                     </li>
                                 </ul>
@@ -449,23 +452,23 @@ $page_title = "View Application";
                         <div class="card mb-4">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="card-title mb-0">CV / Resume</h5>
-                                <?php if (!empty($application['cv_path'])): ?>
-                                <a href="../<?php echo $application['cv_path']; ?>" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <?php if (!empty($application['cv_file'])): ?>
+                                <a href="../<?php echo $application['cv_file']; ?>" target="_blank" class="btn btn-sm btn-outline-primary">
                                     <i class="fas fa-external-link-alt"></i> Open in New Tab
                                 </a>
                                 <?php endif; ?>
                             </div>
                             <div class="card-body">
-                                <?php if (!empty($application['cv_path'])): ?>
+                                <?php if (!empty($application['cv_file'])): ?>
                                     <?php 
-                                    $file_extension = pathinfo($application['cv_path'], PATHINFO_EXTENSION);
+                                    $file_extension = pathinfo($application['cv_file'], PATHINFO_EXTENSION);
                                     if (strtolower($file_extension) === 'pdf'): 
                                     ?>
-                                        <embed src="../<?php echo $application['cv_path']; ?>" type="application/pdf" class="cv-preview">
+                                        <embed src="../<?php echo $application['cv_file']; ?>" type="application/pdf" class="cv-preview">
                                     <?php else: ?>
                                         <div class="alert alert-info">
                                             <i class="fas fa-file"></i> CV file is not a PDF. 
-                                            <a href="../<?php echo $application['cv_path']; ?>" target="_blank" class="btn btn-sm btn-primary ms-2">
+                                            <a href="../<?php echo $application['cv_file']; ?>" target="_blank" class="btn btn-sm btn-primary ms-2">
                                                 Download File
                                             </a>
                                         </div>

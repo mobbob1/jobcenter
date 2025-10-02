@@ -91,13 +91,15 @@ function send_email($to, $subject, $body, $altBody = '', $attachments = []) {
 function send_application_status_notification($application_id, $status, $notes = '') {
     global $conn;
     
-    // Get application details
-    $query = "SELECT a.*, j.title as job_title, c.name as company_name, 
-              u.email as applicant_email, u.full_name as applicant_name
+    // Get application details (align with schema)
+    $query = "SELECT a.*, j.title AS job_title, c.company_name AS company_name,
+              COALESCE(u.email, a.email) AS applicant_email,
+              COALESCE(CONCAT(js.first_name, ' ', js.surname), CONCAT(a.first_name, ' ', a.surname)) AS applicant_name
               FROM applications a
               LEFT JOIN jobs j ON a.job_id = j.id
               LEFT JOIN companies c ON j.company_id = c.id
-              LEFT JOIN users u ON a.user_id = u.id
+              LEFT JOIN job_seekers js ON a.job_seeker_id = js.id
+              LEFT JOIN users u ON js.user_id = u.id
               WHERE a.id = ?";
     
     $stmt = $conn->prepare($query);

@@ -26,8 +26,8 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <i class="fas fa-clock me-2"></i>
                     Pending Jobs
                     <?php
-                    // Count pending jobs
-                    $pending_jobs_query = "SELECT COUNT(*) as count FROM jobs WHERE status = 'pending'";
+                    // Count pending jobs (treat 'inactive' as pending)
+                    $pending_jobs_query = "SELECT COUNT(*) as count FROM jobs WHERE status = 'inactive'";
                     $pending_jobs_result = $conn->query($pending_jobs_query);
                     $pending_jobs_count = $pending_jobs_result->fetch_assoc()['count'];
                     if ($pending_jobs_count > 0):

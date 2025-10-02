@@ -64,7 +64,7 @@ if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
     $application_id = $_GET['delete'];
     
     // Check if application exists
-    $check_query = "SELECT id, cv_path FROM applications WHERE id = ?";
+    $check_query = "SELECT id, cv_file FROM applications WHERE id = ?";
     $check_stmt = $conn->prepare($check_query);
     if ($check_stmt === false) {
         $error_message = "Error preparing statement: " . $conn->error;
@@ -86,8 +86,8 @@ if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
                 
                 if ($delete_stmt->execute()) {
                     // Delete CV file if it exists
-                    if (!empty($application_data['cv_path']) && file_exists('../' . $application_data['cv_path'])) {
-                        unlink('../' . $application_data['cv_path']);
+                    if (!empty($application_data['cv_file']) && file_exists('../' . $application_data['cv_file'])) {
+                        unlink('../' . $application_data['cv_file']);
                     }
                     
                     $delete_success = "Application deleted successfully.";
@@ -113,8 +113,8 @@ $filter_job = isset($_GET['job_id']) ? (int)$_GET['job_id'] : 0;
 $filter_date = isset($_GET['date']) ? $conn->real_escape_string($_GET['date']) : '';
 
 // Build the query
-$query = "SELECT a.*, j.title as job_title, j.company_id, c.name as company_name, 
-          js.first_name as applicant_first_name, js.surname as applicant_surname, js.email as applicant_email, js.phone as applicant_phone
+$query = "SELECT a.*, j.title as job_title, j.company_id, c.company_name as company_name, 
+          js.first_name as applicant_first_name, js.surname as applicant_surname, u.email as applicant_email, js.phone as applicant_phone
           FROM applications a
           LEFT JOIN jobs j ON a.job_id = j.id
           LEFT JOIN companies c ON j.company_id = c.id
@@ -126,7 +126,7 @@ $params = [];
 $types = "";
 
 if (!empty($search)) {
-    $where_clauses[] = "(a.first_name LIKE ? OR a.surname LIKE ? OR j.title LIKE ? OR c.name LIKE ?)";
+    $where_clauses[] = "(a.first_name LIKE ? OR a.surname LIKE ? OR j.title LIKE ? OR c.company_name LIKE ?)";
     $search_param = "%$search%";
     $params[] = $search_param;
     $params[] = $search_param;
@@ -148,7 +148,7 @@ if ($filter_job > 0) {
 }
 
 if (!empty($filter_date)) {
-    $where_clauses[] = "DATE(a.created_at) = ?";
+    $where_clauses[] = "DATE(a.applied_at) = ?";
     $params[] = $filter_date;
     $types .= "s";
 }
@@ -157,7 +157,7 @@ if (!empty($where_clauses)) {
     $query .= " WHERE " . implode(" AND ", $where_clauses);
 }
 
-$query .= " ORDER BY a.created_at DESC LIMIT ?, ?";
+$query .= " ORDER BY a.applied_at DESC LIMIT ?, ?";
 $params[] = $offset;
 $params[] = $records_per_page;
 $types .= "ii";
@@ -170,7 +170,7 @@ if ($stmt === false) {
     $total_records = 0;
     $total_pages = 0;
 } else {
-    if (!empty($params)) {
+    if (!empty($params) && !empty($types)) {
         $stmt->bind_param($types, ...$params);
     }
     $stmt->execute();
@@ -193,11 +193,13 @@ if ($stmt === false) {
         $total_records = 0;
         $total_pages = 0;
     } else {
-        if (!empty($params)) {
+        if (!empty($params) && !empty($types) && count($params) > 2) {
             // Remove the last two parameters (offset and limit)
             $count_types = substr($types, 0, -2);
             $count_params = array_slice($params, 0, -2);
-            $count_stmt->bind_param($count_types, ...$count_params);
+            if (!empty($count_types) && !empty($count_params)) {
+                $count_stmt->bind_param($count_types, ...$count_params);
+            }
         }
         $count_stmt->execute();
         $count_result = $count_stmt->get_result();
@@ -358,15 +360,15 @@ $page_title = "Manage Applications";
                                             </span>
                                         </td>
                                         <td>
-                                            <?php if (!empty($row['cv_path'])): ?>
-                                                <a href="../<?php echo $row['cv_path']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                            <?php if (!empty($row['cv_file'])): ?>
+                                                <a href="../<?php echo $row['cv_file']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary">
                                                     <i class="fas fa-file-pdf"></i> View
                                                 </a>
                                             <?php else: ?>
                                                 <span class="text-muted">No CV</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td><?php echo date('M d, Y', strtotime($row['created_at'])); ?></td>
+                                        <td><?php echo date('M d, Y', strtotime($row['applied_at'])); ?></td>
                                         <td>
                                             <div class="dropdown">
                                                 <button class="btn btn-sm btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton<?php echo $row['id']; ?>" data-bs-toggle="dropdown" aria-expanded="false">

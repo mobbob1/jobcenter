@@ -71,7 +71,7 @@ $check_category_table = $conn->query("SHOW TABLES LIKE 'categories'");
 $categories_exist = $check_category_table->num_rows > 0;
 
 // Build the query - only show pending jobs
-$query = "SELECT j.*, c.name as company_name";
+$query = "SELECT j.*, c.company_name";
 
 // Only include category if the table exists
 if ($categories_exist) {
@@ -89,14 +89,14 @@ if ($categories_exist) {
 
 $query .= " LEFT JOIN applications a ON j.id = a.job_id
           LEFT JOIN users u ON c.user_id = u.id
-          WHERE j.status = 'pending'";
+          WHERE j.status = 'inactive'";
 
 $where_clauses = [];
 $params = [];
 $types = "";
 
 if (!empty($search)) {
-    $where_clauses[] = "(j.title LIKE ? OR j.location LIKE ? OR c.name LIKE ?)";
+    $where_clauses[] = "(j.title LIKE ? OR j.location LIKE ? OR c.company_name LIKE ?)";
     $search_param = "%$search%";
     $params[] = $search_param;
     $params[] = $search_param;
@@ -147,7 +147,7 @@ if ($stmt === false) {
         $count_query .= " LEFT JOIN categories cat ON j.category_id = cat.id";
     }
     
-    $count_query .= " WHERE j.status = 'pending'";
+    $count_query .= " WHERE j.status = 'inactive'";
     
     if (!empty($where_clauses)) {
         $count_query .= " AND " . implode(" AND ", $where_clauses);

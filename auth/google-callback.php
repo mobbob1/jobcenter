@@ -116,15 +116,15 @@ if (isset($_GET['code'])) {
                     
                     $user_id = $conn->insert_id;
                     
-                    // Insert into jobseekers or employers table
+                    // Insert into job_seekers or companies table
                     if ($user_type == 'jobseeker') {
-                        $stmt = $conn->prepare("INSERT INTO jobseekers (user_id, first_name, last_name) VALUES (?, ?, ?)");
+                        $stmt = $conn->prepare("INSERT INTO job_seekers (user_id, first_name, surname) VALUES (?, ?, ?)");
                         $first_name = isset($google_user->given_name) ? $google_user->given_name : '';
-                        $last_name = isset($google_user->family_name) ? $google_user->family_name : '';
-                        $stmt->bind_param("iss", $user_id, $first_name, $last_name);
+                        $surname = isset($google_user->family_name) ? $google_user->family_name : '';
+                        $stmt->bind_param("iss", $user_id, $first_name, $surname);
                         $stmt->execute();
                     } else {
-                        $stmt = $conn->prepare("INSERT INTO employers (user_id, company_name) VALUES (?, ?)");
+                        $stmt = $conn->prepare("INSERT INTO companies (user_id, company_name) VALUES (?, ?) ");
                         $company_name = "Company"; // Default company name
                         $stmt->bind_param("is", $user_id, $company_name);
                         $stmt->execute();

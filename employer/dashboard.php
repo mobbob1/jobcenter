@@ -57,8 +57,8 @@ if ($has_company_profile) {
         $active_jobs = $stmt->get_result()->fetch_assoc()['active'];
     }
     
-    // Pending jobs
-    $pending_query = "SELECT COUNT(*) as pending FROM jobs WHERE company_id = ? AND status = 'pending'";
+    // Pending jobs (treat 'inactive' as pending)
+    $pending_query = "SELECT COUNT(*) as pending FROM jobs WHERE company_id = ? AND status = 'inactive'";
     $stmt = $conn->prepare($pending_query);
     if ($stmt === false) {
         error_log("SQL Error in employer dashboard: " . $conn->error);
@@ -69,22 +69,13 @@ if ($has_company_profile) {
     }
     
     // Total applications
-    $applications_query = "SELECT COUNT(*) as applications FROM job_applications ja 
-                          JOIN jobs j ON ja.job_id = j.id 
+    $applications_query = "SELECT COUNT(*) as applications FROM applications a 
+                          JOIN jobs j ON a.job_id = j.id 
                           WHERE j.company_id = ?";
     $stmt = $conn->prepare($applications_query);
     if ($stmt === false) {
-        // Handle prepare error - check if job_applications table exists
-        $check_table_query = "SHOW TABLES LIKE 'job_applications'";
-        $table_result = $conn->query($check_table_query);
-        if ($table_result->num_rows == 0) {
-            // Table doesn't exist, set applications to 0
-            $total_applications = 0;
-        } else {
-            // Table exists but query failed for another reason
-            error_log("SQL Error in employer dashboard: " . $conn->error);
-            $total_applications = 0;
-        }
+        error_log("SQL Error in employer dashboard: " . $conn->error);
+        $total_applications = 0;
     } else {
         $stmt->bind_param("i", $company_id);
         $stmt->execute();
@@ -95,9 +86,9 @@ if ($has_company_profile) {
 // Get recent jobs
 $recent_jobs = [];
 if ($has_company_profile) {
-    $recent_jobs_query = "SELECT j.*, COUNT(ja.id) as application_count 
+    $recent_jobs_query = "SELECT j.*, COUNT(a.id) as application_count 
                          FROM jobs j 
-                         LEFT JOIN job_applications ja ON j.id = ja.job_id 
+                         LEFT JOIN applications a ON j.id = a.job_id 
                          WHERE j.company_id = ? 
                          GROUP BY j.id 
                          ORDER BY j.created_at DESC 
