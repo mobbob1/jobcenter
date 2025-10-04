@@ -16,7 +16,9 @@ $industry = isset($_GET['industry']) ? $conn->real_escape_string($_GET['industry
 $query = "SELECT c.*, 
           COUNT(DISTINCT j.id) as job_count,
           GROUP_CONCAT(DISTINCT IFNULL(j.location, '') SEPARATOR ', ') as job_locations,
-          GROUP_CONCAT(DISTINCT IFNULL(cat.name, '') SEPARATOR ', ') as industries
+          GROUP_CONCAT(DISTINCT IFNULL(cat.name, '') SEPARATOR ', ') as industries,
+          CONCAT_WS(', ', NULLIF(c.city, ''), NULLIF(c.state, ''), NULLIF(c.country, '')) AS company_location,
+          c.company_description
           FROM companies c
           LEFT JOIN jobs j ON c.id = j.company_id AND j.status = 'active'
           LEFT JOIN categories cat ON j.category_id = cat.id";
@@ -26,7 +28,7 @@ $params = [];
 $types = "";
 
 if (!empty($search)) {
-    $where_clauses[] = "(c.name LIKE ? OR c.description LIKE ?)";
+    $where_clauses[] = "(c.company_name LIKE ? OR c.company_description LIKE ?)";
     $search_param = "%$search%";
     $params[] = $search_param;
     $params[] = $search_param;
@@ -202,16 +204,16 @@ $page_title = "Companies";
                                                     <?php echo htmlspecialchars($company['company_name']); ?>
                                                 </a>
                                             </h5>
-                                            <?php if (!empty($company['location'])): ?>
-                                                <p class="text-muted mb-0"><i class="fas fa-map-marker-alt me-1"></i> <?php echo htmlspecialchars($company['location']); ?></p>
+                                            <?php if (!empty($company['company_location'])): ?>
+                                                <p class="text-muted mb-0"><i class="fas fa-map-marker-alt me-1"></i> <?php echo htmlspecialchars($company['company_location']); ?></p>
                                             <?php endif; ?>
                                         </div>
                                     </div>
                                     
                                     <p class="card-text">
                                         <?php 
-                                        if (!empty($company['description'])) {
-                                            echo htmlspecialchars(substr($company['description'], 0, 100)) . (strlen($company['description']) > 100 ? '...' : '');
+                                        if (!empty($company['company_description'])) {
+                                            echo htmlspecialchars(substr($company['company_description'], 0, 100)) . (strlen($company['company_description']) > 100 ? '...' : '');
                                         } else {
                                             echo '<span class="text-muted">No description available</span>';
                                         }

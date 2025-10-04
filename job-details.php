@@ -63,6 +63,22 @@ if ($stmt === false) {
     }
 }
 
+// Resolve job_seeker_id (if logged-in user is a jobseeker)
+$job_seeker_id = null;
+if (isset($_SESSION['user_id']) && isset($_SESSION['user_type']) && $_SESSION['user_type'] === 'jobseeker') {
+    $q = $conn->prepare('SELECT id FROM job_seekers WHERE user_id = ?');
+    if ($q) {
+        $uid = (int)$_SESSION['user_id'];
+        $q->bind_param('i', $uid);
+        if ($q->execute()) {
+            $rs = $q->get_result();
+            if ($rs && $rs->num_rows > 0) {
+                $job_seeker_id = (int)$rs->fetch_assoc()['id'];
+            }
+        }
+    }
+}
+
 // Process job application form
 $application_submitted = false;
 $application_error_message = '';
@@ -95,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_job'])) {
                     $application_error_message = 'Only PDF, DOC, and DOCX files are allowed for CV.';
                 } else {
                     // Create upload directory if it doesn't exist
-                    $upload_dir = 'uploads/cvs/';
+                    $upload_dir = 'uploads/cv/';
                     if (!is_dir($upload_dir)) {
                         mkdir($upload_dir, 0755, true);
                     }
@@ -115,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_job'])) {
             
             // If no errors, insert application into database
             if (empty($application_error_message)) {
-                $application_query = "INSERT INTO applications (job_id, user_id, first_name, surname, email, phone, location, cv, cover_letter, status, created_at) 
+                $application_query = "INSERT INTO applications (job_id, job_seeker_id, first_name, surname, email, phone, location, cv_file, cover_letter, status, applied_at) 
                                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())";
                 
                 $stmt = $conn->prepare($application_query);
@@ -128,7 +144,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_job'])) {
                     // header('Location: jobs.php?error=1');
                     // exit;
                 } else {
-                    $stmt->bind_param('iissssss', $job_id, $user_id, $first_name, $surname, $email, $phone, $location, $cv_filename, $cover_letter);
+                    $cv_path = 'uploads/cv/' . $cv_filename;
+                    $stmt->bind_param('iisssssss', $job_id, $job_seeker_id, $first_name, $surname, $email, $phone, $location, $cv_path, $cover_letter);
                     
                     if (!$stmt->execute()) {
                         // Handle execution error
@@ -149,29 +166,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['apply_job'])) {
 // Check if user has already applied for this job
 $has_applied = false;
 if (isset($_SESSION['user_id'])) {
-    $check_application = "SELECT id FROM applications WHERE job_id = ? AND user_id = ?";
-    $stmt = $conn->prepare($check_application);
-    if ($stmt === false) {
-        // Handle prepare error with more detailed information
-        $error_message = "Database error: " . $conn->error;
-        // Log the error for debugging
-        error_log("SQL Prepare Error in job-details.php: " . $conn->error);
-    } else {
-        if ($stmt->bind_param('ii', $job_id, $_SESSION['user_id'])) {
-            if (!$stmt->execute()) {
-                // Handle execution error
-                $error_message = "Database error: " . $stmt->error;
-                // Log the error for debugging
-                error_log("SQL Execute Error in job-details.php: " . $stmt->error);
-            } else {
-                $has_applied = ($stmt->get_result()->num_rows > 0);
-            }
+    if ($job_seeker_id !== null) {
+        $check_application = "SELECT id FROM applications WHERE job_id = ? AND job_seeker_id = ?";
+        $stmt = $conn->prepare($check_application);
+        if ($stmt === false) {
+            // Handle prepare error with more detailed information
+            $error_message = "Database error: " . $conn->error;
+            error_log("SQL Prepare Error in job-details.php: " . $conn->error);
         } else {
-            $error_message = "Database error: " . $stmt->error;
-            // Log the error for debugging
-            error_log("SQL Bind Param Error in job-details.php: " . $stmt->error);
+            if ($stmt->bind_param('ii', $job_id, $job_seeker_id)) {
+                if (!$stmt->execute()) {
+                    $error_message = "Database error: " . $stmt->error;
+                    error_log("SQL Execute Error in job-details.php: " . $stmt->error);
+                } else {
+                    $has_applied = ($stmt->get_result()->num_rows > 0);
+                }
+            } else {
+                $error_message = "Database error: " . $stmt->error;
+                error_log("SQL Bind Param Error in job-details.php: " . $stmt->error);
+            }
         }
+    } else {
+        // No profile yet; skip duplicate enforcement
+        $has_applied = false;
     }
+} else {
+    // Not logged in
+    $has_applied = false;
 }
 
 // Get similar jobs

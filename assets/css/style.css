@@ -703,3 +703,12 @@ a:hover {
         gap: 10px;
     }
 }
+
+/* Layout guard: avoid footer overlap with tall cards/hover transforms */
+main {
+    padding-bottom: 100px;
+}
+.site-footer {
+    position: relative;
+    z-index: 10;
+}
